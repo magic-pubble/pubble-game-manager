@@ -355,22 +355,18 @@ app.whenReady().then(() => {
           ? path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'PubbleGameManager.exe')
           : process.execPath)
 
-      const ps1Path = path.join(os.tmpdir(), 'pubble-update.ps1')
-      const safe = (p) => p.replace(/'/g, "''")
-      fs.writeFileSync(ps1Path,
-        `Start-Sleep -Seconds 2\n` +
-        `Copy-Item -Force -Path '${safe(tempPath)}' -Destination '${safe(currentExe)}'\n` +
-        `Start-Process -FilePath '${safe(currentExe)}'\n` +
-        `Remove-Item -Force -Path '${safe(ps1Path)}'`
-      )
+      const vbsPath = path.join(os.tmpdir(), 'pubble-update.vbs')
+      fs.writeFileSync(vbsPath, [
+        'WScript.Sleep 2000',
+        `CreateObject("Scripting.FileSystemObject").CopyFile "${tempPath}", "${currentExe}", True`,
+        `CreateObject("WScript.Shell").Run Chr(34) & "${currentExe}" & Chr(34)`
+      ].join('\r\n'))
 
       setTimeout(() => {
-        const child = require('child_process').spawn('powershell.exe', [
-          '-WindowStyle', 'Hidden',
-          '-ExecutionPolicy', 'Bypass',
-          '-NonInteractive',
-          '-File', ps1Path
-        ], { detached: true, stdio: 'ignore' })
+        const child = require('child_process').spawn('wscript.exe', [vbsPath], {
+          detached: true,
+          stdio: 'ignore'
+        })
         child.unref()
         app.quit()
       }, 1500)
