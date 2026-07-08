@@ -356,8 +356,9 @@ app.whenReady().then(() => {
           ? path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'PubbleGameManager.exe')
           : process.execPath)
 
+      // Retry the copy until the old exe unlocks, then relaunch immediately
       const batPath = path.join(os.tmpdir(), 'pubble-update.bat')
-      fs.writeFileSync(batPath, `@echo off\r\ntimeout /t 2 /nobreak >nul\r\ncopy /y "${tempPath}" "${currentExe}"\r\nstart "" "${currentExe}"\r\ndel "%~f0"\r\n`)
+      fs.writeFileSync(batPath, `@echo off\r\n:retry\r\ncopy /y "${tempPath}" "${currentExe}" >nul 2>&1\r\nif errorlevel 1 (\r\n  ping -n 1 -w 300 127.0.0.1 >nul\r\n  goto retry\r\n)\r\nstart "" "${currentExe}"\r\ndel "%~f0"\r\n`)
 
       // Launch the bat through a VBS wrapper so no console window appears
       const vbsPath = path.join(os.tmpdir(), 'pubble-update-launch.vbs')
@@ -370,7 +371,7 @@ app.whenReady().then(() => {
         })
         child.unref()
         app.quit()
-      }, 1500)
+      }, 600)
 
     } catch (e) {
       sendStatus(splash, 'Could not check for updates.')
