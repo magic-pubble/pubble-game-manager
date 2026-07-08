@@ -244,6 +244,11 @@ load()
 // ── TUTORIAL ──
 const tutorialSteps = [
   {
+    targetId: 'scan-info',
+    title: 'Scanning Folder',
+    text: 'This is the folder the app lives in. It scans this folder for your template and game folders. Move the app into your Pubble folder and everything inside is picked up automatically.'
+  },
+  {
     targetId: 'change-template-btn',
     title: 'Set Your Template',
     text: 'Click ⇄ to pick your template folder — the master copy that all game folders will sync from. Do this first before syncing.'
