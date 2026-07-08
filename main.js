@@ -355,15 +355,22 @@ app.whenReady().then(() => {
           ? path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'PubbleGameManager.exe')
           : process.execPath)
 
-      const batPath = path.join(os.tmpdir(), 'pubble-update.bat')
-      fs.writeFileSync(batPath, `@echo off\ntimeout /t 2 /nobreak >nul\ncopy /y "${tempPath}" "${currentExe}"\nstart "" "${currentExe}"\ndel "%~f0"`)
+      const ps1Path = path.join(os.tmpdir(), 'pubble-update.ps1')
+      const safe = (p) => p.replace(/'/g, "''")
+      fs.writeFileSync(ps1Path,
+        `Start-Sleep -Seconds 2\n` +
+        `Copy-Item -Force -Path '${safe(tempPath)}' -Destination '${safe(currentExe)}'\n` +
+        `Start-Process -FilePath '${safe(currentExe)}'\n` +
+        `Remove-Item -Force -Path '${safe(ps1Path)}'`
+      )
 
       setTimeout(() => {
-        const child = require('child_process').spawn('cmd.exe', ['/c', batPath], {
-          detached: true,
-          stdio: 'ignore',
-          shell: false
-        })
+        const child = require('child_process').spawn('powershell.exe', [
+          '-WindowStyle', 'Hidden',
+          '-ExecutionPolicy', 'Bypass',
+          '-NonInteractive',
+          '-File', ps1Path
+        ], { detached: true, stdio: 'ignore' })
         child.unref()
         app.quit()
       }, 1500)
