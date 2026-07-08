@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>Pubble Sync</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --yellow: #ffd000;
+      --pink:   #FF1A5E;
+      --green:  #00c853;
+      --red:    #ff4444;
+      --bg:     #f0f2f5;
+      --surface: #ffffff;
+      --sidebar-bg: #1e1e2e;
+      --border: #e0e0e0;
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,68,68,0.4); }
+      50%       { box-shadow: 0 0 0 5px rgba(255,68,68,0); }
+    }
+    @keyframes popIn {
+      0%   { opacity: 0; transform: scale(0.85); }
+      70%  { transform: scale(1.03); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: #1a1a1a;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 210px;
+      min-width: 210px;
+      background: var(--sidebar-bg);
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-logo {
+      padding: 22px 18px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .sidebar-logo h1 {
+      font-size: 15px;
+      font-weight: 900;
+      color: var(--pink);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .sidebar-logo p { font-size: 10px; color: #888; margin-top: 3px; }
+
+    .nav { padding: 14px 10px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+    .nav-label { font-size: 9px; color: #666; letter-spacing: 1.5px; text-transform: uppercase; padding: 8px 8px 4px; font-weight: 700; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 12px; border-radius: 8px;
+      cursor: pointer; font-size: 13px; font-weight: 500;
+      color: #aaa; transition: all 0.15s; user-select: none;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .nav-item.active { background: var(--pink); color: #fff; font-weight: 700; }
+    .nav-item .icon { font-size: 15px; width: 20px; text-align: center; }
+
+    /* THEME TOGGLE SWITCH */
+    .theme-switch-wrap {
+      padding: 10px 18px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex; align-items: center; justify-content: flex-start;
+    }
+    .theme-switch {
+      width: 58px; height: 28px; border-radius: 28px;
+      background: #1e1e2e; border: 1px solid #333;
+      cursor: pointer; position: relative;
+      display: flex; align-items: center;
+      padding: 3px; flex-shrink: 0;
+    }
+    /* Blue knob slides: left = light (sun), right = dark (moon) */
+    .switch-knob {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #3a3acc;
+      position: absolute; left: 3px;
+      transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+      z-index: 1;
+    }
+    .theme-switch.dark-active .switch-knob { transform: translateX(30px); }
+    /* Icons sit at exact center of where knob will be */
+    /* Pill=58px, padding=3px, knob=22px */
+    /* Sun knob center: 3 + 11 = 14px. Moon knob center: 33 + 11 = 44px */
+    .switch-icon-sun, .switch-icon-moon {
+      position: absolute; font-size: 11px;
+      line-height: 1; z-index: 2; pointer-events: none;
+      transition: color 0.2s;
+      top: 50%; transform: translate(-50%, -50%);
+    }
+    .switch-icon-sun  { left: 14px; color: #fff; }
+    .switch-icon-moon { left: 44px; color: #666; transform: translate(-50%, -50%) rotate(-20deg); }
+    .theme-switch.dark-active .switch-icon-sun  { color: #555; }
+    .theme-switch.dark-active .switch-icon-moon { color: #fff; }
+
+    .sidebar-footer {
+      padding: 16px 18px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .sidebar-footer .tpl-label { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+    .sidebar-footer .tpl-name-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+    .sidebar-footer .tpl-name  { font-size: 13px; color: #fff; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-footer .tpl-edit { font-size: 16px; color: #aaa; cursor: pointer; flex-shrink: 0; transition: color 0.15s, transform 0.15s; line-height: 1; }
+    .sidebar-footer .tpl-edit:hover { color: var(--pink); transform: scale(1.2); }
+    .sidebar-footer .tpl-date  { font-size: 13px; color: var(--yellow); font-weight: 800; margin-top: 5px; }
+    .sidebar-footer .tpl-sublabel { font-size: 9px; color: #666; margin-top: 8px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+
+    /* LIGHT MODE */
+    body.light-mode {
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --border: #e0e0e0;
+    }
+    body.light-mode .main { background: var(--bg); }
+    body.light-mode .page-header { background: var(--surface); }
+    body.light-mode .stats-bar { background: var(--surface); }
+    body.light-mode .folder-row { background: var(--surface); }
+    body.light-mode .sync-footer { background: var(--surface); }
+    body.light-mode .form-card { background: var(--surface); }
+
+    /* DARK MODE */
+    body.dark-mode {
+      --bg: #111118;
+      --surface: #1c1c28;
+      --border: #2a2a3a;
+    }
+    body.dark-mode .main { background: var(--bg); color: #e0e0e0; }
+    body.dark-mode .page-header h2 { color: #fff; }
+    body.dark-mode .page-header p  { color: #555; }
+    body.dark-mode .folder-row { background: var(--surface); box-shadow: none; }
+    body.dark-mode .folder-row:hover { background: #22223a; border-color: #333; }
+    body.dark-mode .folder-name { color: #e0e0e0; }
+    body.dark-mode .folder-date { color: #555; }
+    body.dark-mode .col-headers { color: #444; }
+    body.dark-mode .sync-footer { background: var(--surface); border-color: var(--border); }
+    body.dark-mode .stats-bar { background: var(--surface); border-color: var(--border); }
+    body.dark-mode .page-header { background: var(--surface); border-color: var(--border); }
+    body.dark-mode .select-all { color: #555; }
+    body.dark-mode .legend { color: #333; }
+    body.dark-mode .status-never { background: #222; color: #555; border-color: #2a2a2a; }
+    body.dark-mode .form-card { background: var(--surface); border-color: var(--border); }
+    body.dark-mode .form-card h3 { color: #fff; }
+    body.dark-mode .form-card > p { color: #555; }
+    body.dark-mode .form-group label { color: #555; }
+    body.dark-mode .form-group input[type=text] { background: #111; border-color: #2a2a2a; color: #e0e0e0; }
+    body.dark-mode .preview-card { background: #111; border-color: #222; }
+    body.dark-mode .preview-card .preview-label { color: #444; }
+    body.dark-mode .input-hint { color: #444; }
+    body.dark-mode .new-game-wrap { background: var(--bg); }
+    body.dark-mode .btn-primary:disabled { background: #222; color: #444; }
+    body.dark-mode .next-steps { background: #111; border-color: #222; }
+    body.dark-mode .next-steps .step { color: #555; }
+    body.dark-mode .success-card { background: var(--surface); }
+    body.dark-mode .success-card > p { color: #555; }
+    body.dark-mode .table-wrap::-webkit-scrollbar-thumb { background: #2a2a2a; }
+
+    /* ── MAIN ── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .page { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+    .page.active { display: flex; }
+
+    /* ── PAGE HEADER ── */
+    .page-header {
+      padding: 20px 26px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .page-header h2 { font-size: 18px; font-weight: 800; color: #111; }
+    .page-header p  { font-size: 12px; color: #888; margin-top: 3px; }
+
+    /* ── STATS BAR ── */
+    .stats-bar {
+      display: flex; gap: 24px;
+      padding: 10px 26px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .stat { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #999; }
+    .stat-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .stat-dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .stat-dot.red   { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+    .stat-dot.gray  { background: #ccc; }
+    .stat-val { font-weight: 800; color: #333; }
+
+    /* ── FOLDER LIST ── */
+    .table-wrap { flex: 1; overflow-y: auto; padding: 14px 20px 0; }
+    .table-wrap::-webkit-scrollbar { width: 4px; }
+    .table-wrap::-webkit-scrollbar-thumb { background: #ddd; border-radius: 2px; }
+
+    .col-headers {
+      display: grid; grid-template-columns: 36px 1fr 175px 130px;
+      gap: 12px; padding: 0 14px 10px;
+      font-size: 10px; color: #bbb;
+      text-transform: uppercase; letter-spacing: 1px; font-weight: 700;
+    }
+
+    .folder-row {
+      display: grid; grid-template-columns: 36px 1fr 175px 130px;
+      gap: 12px; align-items: center;
+      padding: 13px 14px; border-radius: 10px; margin-bottom: 6px;
+      cursor: pointer; border: 1px solid transparent;
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      transition: all 0.15s ease;
+      animation: fadeInUp 0.2s ease both;
+    }
+    .folder-row:hover { border-color: #ddd; box-shadow: 0 3px 10px rgba(0,0,0,0.1); transform: translateY(-1px); }
+    .folder-row.selected { border-color: var(--pink); background: rgba(255,26,94,0.04); }
+
+    .folder-row input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--pink); cursor: pointer; }
+    .folder-name { font-size: 13px; font-weight: 700; color: #222; }
+    .folder-date { font-size: 11px; color: #aaa; font-family: monospace; }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 10px; font-weight: 800;
+      padding: 5px 12px; border-radius: 20px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .status-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .status-ok       { background: rgba(0,200,83,0.1);  color: #009e3f; border: 1px solid rgba(0,200,83,0.3); }
+    .status-ok::before { background: var(--green); }
+    .status-outdated { background: rgba(255,68,68,0.1); color: var(--red); border: 1px solid rgba(255,68,68,0.3); animation: pulse 2s infinite; }
+    .status-outdated::before { background: var(--red); }
+    .status-never    { background: #f5f5f5; color: #aaa; border: 1px solid #e0e0e0; }
+    .status-never::before { background: #ccc; }
+
+    .row-outdated .folder-name { color: var(--red); }
+    .row-never    .folder-name { color: #aaa; }
+
+    /* ── SYNC FOOTER ── */
+    .sync-footer {
+      padding: 14px 26px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 14px;
+      background: var(--surface);
+    }
+    .select-all {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; color: #aaa; cursor: pointer;
+      user-select: none; font-weight: 600; transition: color 0.15s;
+    }
+    .select-all:hover { color: var(--pink); }
+    .select-all-circle {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid #ccc; display: flex; align-items: center;
+      justify-content: center; transition: all 0.15s; flex-shrink: 0;
+    }
+    .select-all:hover .select-all-circle { border-color: var(--pink); }
+    .select-all.all-checked .select-all-circle {
+      background: var(--pink); border-color: var(--pink);
+    }
+    .select-all.all-checked .select-all-circle::after {
+      content: '✓'; font-size: 11px; color: #fff; font-weight: 900; line-height: 1;
+    }
+    .select-all.all-checked { color: var(--pink); }
+    .legend { flex: 1; font-size: 11px; color: #ccc; }
+
+    .btn-primary {
+      background: var(--pink);
+      color: #fff; border: none; border-radius: 8px;
+      padding: 11px 26px; font-size: 12px; font-weight: 800;
+      cursor: pointer; transition: all 0.15s;
+      white-space: nowrap; text-transform: uppercase; letter-spacing: 0.8px;
+      box-shadow: 0 4px 14px rgba(255,26,94,0.35);
+    }
+    .btn-primary:hover:not(:disabled) { background: #e0164f; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(255,26,94,0.5); }
+    .btn-primary:disabled { background: #e0e0e0; color: #bbb; cursor: not-allowed; box-shadow: none; }
+
+    /* ── NEW GAME PAGE ── */
+    .new-game-wrap { flex: 1; overflow-y: auto; padding: 28px 26px; background: var(--bg); }
+
+    .form-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 28px; max-width: 500px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      animation: fadeInUp 0.25s ease both;
+    }
+    .form-card h3 { font-size: 15px; font-weight: 800; color: #111; margin-bottom: 4px; }
+    .form-card > p { font-size: 12px; color: #999; margin-bottom: 24px; }
+
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+    .form-group input[type=text] {
+      width: 100%; background: #f9f9f9; border: 1.5px solid #e0e0e0;
+      border-radius: 8px; padding: 11px 14px;
+      font-size: 13px; color: #111; outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s; font-family: monospace;
+    }
+    .form-group input[type=text]:focus { border-color: var(--pink); box-shadow: 0 0 0 3px rgba(255,26,94,0.1); }
+    .form-group input[type=text]::placeholder { color: #ccc; }
+    .input-hint { font-size: 11px; color: #bbb; margin-top: 6px; }
+
+    .preview-card {
+      background: #f9f9f9; border: 1px solid #ebebeb;
+      border-radius: 10px; padding: 16px 18px; margin-bottom: 24px;
+    }
+    .preview-card .preview-label { font-size: 10px; color: #bbb; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; font-weight: 700; }
+    .preview-tree { font-family: monospace; font-size: 12px; color: #aaa; line-height: 1.9; white-space: pre; }
+    .preview-tree .highlight { color: var(--pink); font-weight: 800; }
+    .preview-tree .dim { color: #ccc; }
+    .preview-tree .manual { color: var(--red); font-weight: 700; }
+
+    .manual-notice {
+      margin-top: 14px;
+      background: rgba(255,68,68,0.06);
+      border: 1px solid rgba(255,68,68,0.2);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .manual-notice .notice-title {
+      font-size: 11px; font-weight: 800; color: var(--red);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
+    }
+    .manual-notice .notice-item {
+      font-size: 11px; color: #888; padding: 3px 0;
+      display: flex; gap: 8px; align-items: flex-start;
+    }
+    .manual-notice .notice-item .dot { color: var(--red); font-weight: 900; margin-top: 1px; }
+
+    .btn-create {
+      width: 100%; background: var(--pink); color: #fff; border: none;
+      border-radius: 8px; padding: 13px; font-size: 13px; font-weight: 800;
+      cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
+      transition: all 0.15s; box-shadow: 0 4px 14px rgba(255,26,94,0.3);
+    }
+    .btn-create:hover:not(:disabled) { background: #e0164f; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(255,26,94,0.45); }
+    .btn-create:disabled { background: #e0e0e0; color: #bbb; cursor: not-allowed; box-shadow: none; }
+
+    .success-card {
+      background: var(--surface); border: 1.5px solid rgba(0,200,83,0.3);
+      border-radius: 12px; padding: 32px 28px; max-width: 500px;
+      text-align: center; box-shadow: 0 4px 20px rgba(0,200,83,0.08);
+      animation: popIn 0.35s ease both; display: none;
+    }
+    .success-card .success-icon { font-size: 44px; margin-bottom: 14px; }
+    .success-card h3 { font-size: 18px; font-weight: 900; color: var(--green); margin-bottom: 6px; }
+    .success-card > p { font-size: 12px; color: #999; margin-bottom: 20px; }
+    .next-steps { text-align: left; background: #f9f9f9; border-radius: 8px; padding: 16px; margin-bottom: 20px; border: 1px solid #ebebeb; }
+    .next-steps .step { font-size: 12px; color: #777; padding: 5px 0; display: flex; gap: 10px; }
+    .next-steps .step .num { color: var(--pink); font-weight: 800; min-width: 18px; }
+    .btn-again {
+      background: transparent; color: var(--pink);
+      border: 1.5px solid rgba(255,26,94,0.3); border-radius: 8px;
+      padding: 10px 22px; font-size: 12px; font-weight: 700;
+      cursor: pointer; text-transform: uppercase; letter-spacing: 0.8px; transition: all 0.15s;
+    }
+    .btn-again:hover { background: rgba(255,26,94,0.06); }
+
+    /* ── OVERLAY ── */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); z-index: 100;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 20px; backdrop-filter: blur(6px);
+    }
+    .overlay.active { display: flex; }
+    .overlay-title { font-size: 14px; color: #fff; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; }
+    .spinner { width: 30px; height: 30px; border: 3px solid rgba(255,255,255,0.15); border-top-color: var(--pink); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    .progress-box { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; width: 480px; max-height: 260px; overflow-y: auto; padding: 18px; }
+    .progress-line { font-size: 12px; color: #555; padding: 3px 0; font-family: monospace; }
+    .progress-line.ok  { color: var(--green); }
+    .progress-line.err { color: var(--red); }
+    .btn-close {
+      display: none; background: #fff; color: #333;
+      border: 1px solid #ddd; border-radius: 8px;
+      padding: 10px 28px; font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .btn-close:hover { background: #f5f5f5; }
+
+    .empty { text-align: center; color: #ccc; font-size: 13px; padding: 50px 0; }
+
+    /* ── LIGHTBULB BUTTON ── */
+    .sidebar-logo { position: relative; }
+    #btn-lightbulb {
+      position: absolute; top: 18px; right: 14px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px; padding: 4px 7px; font-size: 14px;
+      cursor: pointer; transition: background 0.15s; line-height: 1; color: inherit;
+    }
+    #btn-lightbulb:hover { background: rgba(255,255,255,0.15); }
+
+    /* ── TUTORIAL OVERLAY ── */
+    #tutorial-overlay {
+      position: fixed; inset: 0; z-index: 300;
+      pointer-events: all; background: transparent;
+    }
+    #tutorial-spotlight {
+      position: fixed; border-radius: 10px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.76), 0 0 0 3px rgba(255,255,255,0.25);
+      transition: left 0.35s cubic-bezier(0.4,0,0.2,1),
+                  top  0.35s cubic-bezier(0.4,0,0.2,1),
+                  width  0.35s cubic-bezier(0.4,0,0.2,1),
+                  height 0.35s cubic-bezier(0.4,0,0.2,1);
+      pointer-events: none; z-index: 301;
+    }
+    #tutorial-tooltip {
+      position: fixed; background: #fff; border-radius: 14px;
+      padding: 22px 24px; width: 270px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.45); z-index: 302;
+      transition: top 0.35s cubic-bezier(0.4,0,0.2,1), left 0.35s cubic-bezier(0.4,0,0.2,1);
+    }
+    #tutorial-tooltip::before {
+      content: ''; position: absolute;
+      left: -8px; top: var(--arrow-top, 50%); transform: translateY(-50%);
+      border: 8px solid transparent;
+      border-right: 8px solid #fff; border-left: none;
+    }
+    #tutorial-step-num { font-size: 10px; color: #bbb; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 8px; }
+    #tutorial-title { font-size: 15px; font-weight: 900; color: #111; margin-bottom: 8px; }
+    #tutorial-text { font-size: 12px; color: #666; line-height: 1.6; margin-bottom: 18px; }
+    #tutorial-text b { color: #FF1A5E; font-weight: 700; }
+    #tutorial-dismiss {
+      font-size: 11px; color: #bbb; background: none; border: none;
+      cursor: pointer; padding: 0; text-decoration: underline;
+    }
+    #tutorial-dismiss:hover { color: #999; }
+    #tutorial-prev, #tutorial-next {
+      position: fixed; top: 50%; z-index: 302;
+      background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2);
+      color: #fff; border-radius: 50%; width: 44px; height: 44px;
+      font-size: 24px; cursor: pointer; display: flex;
+      align-items: center; justify-content: center;
+      transform: translateY(-50%); transition: background 0.15s, opacity 0.15s;
+      line-height: 1;
+    }
+    #tutorial-prev { left: 16px; }
+    #tutorial-next { right: 16px; }
+    #tutorial-prev:hover, #tutorial-next:hover { background: rgba(255,255,255,0.28); }
+    #tutorial-prev:disabled { opacity: 0.3; cursor: default; }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <h1>Pubble Sync</h1>
+      <p>Game management tool</p>
+      <button id="btn-lightbulb" title="Show tutorial">💡</button>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-label">Tools</div>
+      <div class="nav-item active" data-page="sync">
+        <span class="icon">⟳</span> Sync Games
+      </div>
+      <div class="nav-item" data-page="newgame">
+        <span class="icon">+</span> New Game
+      </div>
+    </nav>
+
+    <div class="theme-switch-wrap">
+      <button class="theme-switch" id="theme-switch">
+        <span class="switch-icon-sun">☀</span>
+        <span class="switch-icon-moon">☾</span>
+        <span class="switch-knob"></span>
+      </button>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="tpl-label">Template</div>
+      <div class="tpl-name-row">
+        <div class="tpl-name" id="sidebar-tpl-name">—</div>
+        <span class="tpl-edit" id="change-template-btn" title="Change template folder">⇄</span>
+      </div>
+      <div class="tpl-sublabel">Last Updated</div>
+      <div class="tpl-date" id="sidebar-tpl-date">—</div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- ── SYNC PAGE ── -->
+    <div class="page active" id="page-sync">
+      <div class="page-header">
+        <h2>Sync Games</h2>
+        <p>Update selected game folders with the latest universal files from the template.</p>
+      </div>
+
+      <div class="stats-bar">
+        <div class="stat"><span class="stat-dot green"></span> <span class="stat-val" id="count-ok">0</span>&nbsp;up to date</div>
+        <div class="stat"><span class="stat-dot red"></span>   <span class="stat-val" id="count-outdated">0</span>&nbsp;outdated</div>
+        <div class="stat"><span class="stat-dot gray"></span>  <span class="stat-val" id="count-never">0</span>&nbsp;never synced</div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="col-headers">
+          <div></div><div>Name</div><div>Last Synced</div><div>Status</div>
+        </div>
+        <div id="folder-list"><div class="empty">Loading...</div></div>
+      </div>
+
+      <div class="sync-footer">
+        <span class="select-all" id="select-all-btn">
+          <span class="select-all-circle"></span>
+          Select all
+        </span>
+        <div class="legend"></div>
+        <button class="btn-primary" id="sync-btn" disabled>Sync Selected</button>
+      </div>
+    </div>
+
+    <!-- ── NEW GAME PAGE ── -->
+    <div class="page" id="page-newgame">
+      <div class="page-header">
+        <h2>New Game</h2>
+        <p>Create a new game folder from the template, ready to customise.</p>
+      </div>
+
+      <div class="new-game-wrap">
+
+        <!-- FORM -->
+        <div class="form-card" id="new-game-form">
+          <h3>Game folder name</h3>
+          <p>Use a clear naming convention so your folders stay organised.</p>
+
+          <div class="form-group">
+            <label>Folder Name</label>
+            <input type="text" id="game-name-input" placeholder="e.g. 011_Space_Adventure" autocomplete="off">
+            <div class="input-hint">Tip: prefix with a number to keep folders sorted (010_, 011_, etc.)</div>
+          </div>
+
+          <div class="preview-card" id="preview-card">
+            <div class="preview-label">Folder preview</div>
+            <div class="preview-tree" id="preview-tree">
+              <span class="dim">Enter a name above to see a preview</span>
+            </div>
+            <div class="manual-notice" id="manual-notice" style="display:none">
+              <div class="notice-title">✏ Requires manual editing after creation</div>
+              <div class="notice-item"><span class="dot">→</span><span><strong>index.html</strong> — build your full slide structure here (unique per game)</span></div>
+              <div class="notice-item"><span class="dot">→</span><span><strong>dist/content.css</strong> — add all question text and CSS variables here</span></div>
+            </div>
+          </div>
+
+          <button class="btn-create" id="create-btn" disabled>Create Game Folder</button>
+        </div>
+
+        <!-- SUCCESS -->
+        <div class="success-card" id="success-card">
+          <div class="success-icon" style="display:none"></div>
+          <h3 id="success-title">Game Created!</h3>
+          <p id="success-desc">Your new game folder is ready. Here's what to do next:</p>
+          <div class="next-steps">
+            <div class="step"><span class="num">1.</span><span>Open <strong>dist/content.css</strong> — add your CSS variables and question text</span></div>
+            <div class="step"><span class="num">2.</span><span>Open <strong>index.html</strong> — build your slide structure</span></div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;">
+            <button class="btn-again" id="create-another-btn">+ Create Another</button>
+            <button class="btn-again" id="done-btn" style="border-color:rgba(255,255,255,0.1);color:#aaa;">Done</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- OVERLAY -->
+  <div class="overlay" id="overlay">
+    <div class="spinner" id="overlay-spinner"></div>
+    <div class="overlay-title" id="overlay-title">Syncing...</div>
+    <div class="progress-box" id="progress-box"></div>
+    <button class="btn-close" id="close-btn">Done</button>
+  </div>
+
+  <!-- TUTORIAL OVERLAY -->
+  <div id="tutorial-overlay" style="display:none">
+    <div id="tutorial-spotlight"></div>
+    <div id="tutorial-tooltip">
+      <div id="tutorial-step-num">1 of 3</div>
+      <div id="tutorial-title"></div>
+      <p id="tutorial-text"></p>
+      <button id="tutorial-dismiss">Skip tutorial</button>
+    </div>
+    <button id="tutorial-prev">‹</button>
+    <button id="tutorial-next">›</button>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
