@@ -355,17 +355,14 @@ app.whenReady().then(() => {
           ? path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'PubbleGameManager.exe')
           : process.execPath)
 
-      const vbsPath = path.join(os.tmpdir(), 'pubble-update.vbs')
-      fs.writeFileSync(vbsPath, [
-        'WScript.Sleep 2000',
-        `CreateObject("Scripting.FileSystemObject").CopyFile "${tempPath}", "${currentExe}", True`,
-        `CreateObject("WScript.Shell").Run Chr(34) & "${currentExe}" & Chr(34)`
-      ].join('\r\n'))
+      const batPath = path.join(os.tmpdir(), 'pubble-update.bat')
+      fs.writeFileSync(batPath, `@echo off\r\ntimeout /t 2 /nobreak >nul\r\ncopy /y "${tempPath}" "${currentExe}"\r\nstart "" "${currentExe}"\r\ndel "%~f0"\r\n`)
 
       setTimeout(() => {
-        const child = require('child_process').spawn('wscript.exe', [vbsPath], {
+        const child = require('child_process').spawn('cmd.exe', ['/c', batPath], {
           detached: true,
-          stdio: 'ignore'
+          stdio: 'ignore',
+          windowsHide: true
         })
         child.unref()
         app.quit()
