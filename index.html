@@ -122,6 +122,8 @@
     .sidebar-footer .tpl-edit:hover { color: var(--pink); transform: scale(1.2); }
     .sidebar-footer .tpl-date  { font-size: 13px; color: var(--yellow); font-weight: 800; margin-top: 5px; }
     .sidebar-footer .tpl-sublabel { font-size: 9px; color: #666; margin-top: 8px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+    .sidebar-footer .scan-label { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 4px; }
+    .sidebar-footer .scan-path { font-size: 10px; color: #555; word-break: break-all; line-height: 1.4; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 12px; }
 
     /* LIGHT MODE */
     body.light-mode {
@@ -478,6 +480,8 @@
     </div>
 
     <div class="sidebar-footer">
+      <div class="scan-label">Scanning</div>
+      <div class="scan-path" id="sidebar-scan-path">—</div>
       <div class="tpl-label">Template</div>
       <div class="tpl-name-row">
         <div class="tpl-name" id="sidebar-tpl-name">—</div>

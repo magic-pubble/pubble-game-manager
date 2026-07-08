@@ -17,6 +17,24 @@ function getTemplateName() {
       if (cfg.templateFolder) return cfg.templateFolder
     }
   } catch {}
+
+  // Auto-detect: find a folder in root that looks like a Pubble template
+  try {
+    const folders = fs.readdirSync(root, { withFileTypes: true })
+      .filter(e => e.isDirectory())
+      .map(e => e.name)
+
+    for (const name of folders) {
+      const hasContentCss = fs.existsSync(path.join(root, name, 'dist', 'content.css'))
+      const hasReveal     = fs.existsSync(path.join(root, name, 'dist', 'reveal.js'))
+      if (hasContentCss && hasReveal) {
+        // Save auto-detected template to config
+        fs.writeFileSync(configPath, JSON.stringify({ templateFolder: name }, null, 2), 'utf8')
+        return name
+      }
+    }
+  } catch {}
+
   return 'Pubble HTML - New'
 }
 
@@ -107,7 +125,7 @@ ipcMain.handle('get-status', () => {
   const templateExists = fs.existsSync(source)
   const templateDate = templateExists ? getTemplateDate(source) : null
   const folders = templateExists ? getFolders(source, templateName) : []
-  return { templateName, templateDate, folders, templateExists }
+  return { templateName, templateDate, folders, templateExists, root }
 })
 
 ipcMain.handle('run-sync', async (event, folderNames) => {
