@@ -1,6 +1,6 @@
 {
   "name": "pubble-game-manager",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "Internal tool for syncing and creating Pubble game folders.",
   "main": "main.js",
   "scripts": {

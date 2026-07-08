@@ -359,7 +359,12 @@ app.whenReady().then(() => {
       fs.writeFileSync(batPath, `@echo off\ntimeout /t 2 /nobreak >nul\ncopy /y "${tempPath}" "${currentExe}"\nstart "" "${currentExe}"\ndel "%~f0"`)
 
       setTimeout(() => {
-        require('child_process').execFile(batPath, { detached: true, shell: true })
+        const child = require('child_process').spawn('cmd.exe', ['/c', batPath], {
+          detached: true,
+          stdio: 'ignore',
+          shell: false
+        })
+        child.unref()
         app.quit()
       }, 1500)
 
