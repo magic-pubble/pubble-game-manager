@@ -307,7 +307,7 @@ function downloadFile(url, dest, onProgress) {
         res.on('data', chunk => {
           received += chunk.length
           file.write(chunk)
-          if (total) onProgress(Math.round(received / total * 100))
+          onProgress(total ? Math.round(received / total * 100) : null, received)
         })
         res.on('end', () => { file.end(); resolve() })
         res.on('error', reject)
@@ -344,8 +344,9 @@ app.whenReady().then(() => {
 
       sendStatus(splash, `Update found: ${latestVersion}. Downloading...`, 0)
       const tempPath = path.join(os.tmpdir(), asset.name)
-      await downloadFile(asset.browser_download_url, tempPath, (pct) => {
-        sendStatus(splash, `Downloading update... ${pct}%`, pct)
+      await downloadFile(asset.browser_download_url, tempPath, (pct, received) => {
+        if (pct !== null) sendStatus(splash, `Downloading update... ${pct}%`, pct)
+        else sendStatus(splash, `Downloading update... ${(received / 1048576).toFixed(1)} MB`, 50)
       })
 
       sendStatus(splash, 'Update ready. Restarting...', 100)
@@ -358,11 +359,14 @@ app.whenReady().then(() => {
       const batPath = path.join(os.tmpdir(), 'pubble-update.bat')
       fs.writeFileSync(batPath, `@echo off\r\ntimeout /t 2 /nobreak >nul\r\ncopy /y "${tempPath}" "${currentExe}"\r\nstart "" "${currentExe}"\r\ndel "%~f0"\r\n`)
 
+      // Launch the bat through a VBS wrapper so no console window appears
+      const vbsPath = path.join(os.tmpdir(), 'pubble-update-launch.vbs')
+      fs.writeFileSync(vbsPath, `CreateObject("WScript.Shell").Run "cmd /c ""${batPath}""", 0, False\r\n`)
+
       setTimeout(() => {
-        const child = require('child_process').spawn('cmd.exe', ['/c', batPath], {
+        const child = require('child_process').spawn('wscript.exe', [vbsPath], {
           detached: true,
-          stdio: 'ignore',
-          windowsHide: true
+          stdio: 'ignore'
         })
         child.unref()
         app.quit()
