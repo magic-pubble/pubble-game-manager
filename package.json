@@ -1,6 +1,6 @@
 {
   "name": "pubble-game-manager",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Internal tool for syncing and creating Pubble game folders.",
   "main": "main.js",
   "scripts": {
@@ -27,9 +27,6 @@
       "**/*",
       "!node_modules/electron-builder/**"
     ]
-  },
-  "dependencies": {
-    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "electron": "^28.0.0",

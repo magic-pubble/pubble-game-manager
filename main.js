@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
-const { autoUpdater } = require('electron-updater')
+const https = require('https')
+const os = require('os')
 const path = require('path')
 const fs = require('fs')
 
@@ -269,6 +270,53 @@ function sendStatus(splash, message, progress) {
   }
 }
 
+function fetchLatestRelease() {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.github.com',
+      path: '/repos/magic-pubble/pubble-game-manager/releases/latest',
+      headers: { 'User-Agent': 'PubbleGameManager' }
+    }
+    https.get(options, (res) => {
+      let data = ''
+      res.on('data', chunk => data += chunk)
+      res.on('end', () => { try { resolve(JSON.parse(data)) } catch (e) { reject(e) } })
+    }).on('error', reject)
+  })
+}
+
+function isNewer(latest, current) {
+  const a = latest.replace('v', '').split('.').map(Number)
+  const b = current.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) > (b[i] || 0)) return true
+    if ((a[i] || 0) < (b[i] || 0)) return false
+  }
+  return false
+}
+
+function downloadFile(url, dest, onProgress) {
+  return new Promise((resolve, reject) => {
+    const follow = (u) => {
+      const mod = u.startsWith('https') ? https : require('http')
+      mod.get(u, { headers: { 'User-Agent': 'PubbleGameManager' } }, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) { follow(res.headers.location); return }
+        const total = parseInt(res.headers['content-length'], 10)
+        let received = 0
+        const file = fs.createWriteStream(dest)
+        res.on('data', chunk => {
+          received += chunk.length
+          file.write(chunk)
+          if (total) onProgress(Math.round(received / total * 100))
+        })
+        res.on('end', () => { file.end(); resolve() })
+        res.on('error', reject)
+      }).on('error', reject)
+    }
+    follow(url)
+  })
+}
+
 app.whenReady().then(() => {
   const splash = createSplashWindow()
 
@@ -279,35 +327,48 @@ app.whenReady().then(() => {
     }, 800)
   }
 
-  autoUpdater.on('checking-for-update', () => {
+  const checkForUpdates = async () => {
     sendStatus(splash, 'Checking for updates...')
-  })
+    try {
+      const release = await fetchLatestRelease()
+      const latestVersion = release.tag_name
+      const currentVersion = app.getVersion()
 
-  autoUpdater.on('update-available', () => {
-    sendStatus(splash, 'Update found. Downloading...')
-  })
+      if (!isNewer(latestVersion, currentVersion)) {
+        sendStatus(splash, 'Up to date.')
+        return openMain()
+      }
 
-  autoUpdater.on('download-progress', (info) => {
-    const pct = Math.round(info.percent)
-    sendStatus(splash, `Downloading update... ${pct}%`, pct)
-  })
+      const asset = release.assets.find(a => a.name.endsWith('.exe'))
+      if (!asset) { sendStatus(splash, 'Could not find update file.'); return openMain() }
 
-  autoUpdater.on('update-downloaded', () => {
-    sendStatus(splash, 'Update ready. Restarting...', 100)
-    setTimeout(() => autoUpdater.quitAndInstall(), 1500)
-  })
+      sendStatus(splash, `Update found: ${latestVersion}. Downloading...`, 0)
+      const tempPath = path.join(os.tmpdir(), asset.name)
+      await downloadFile(asset.browser_download_url, tempPath, (pct) => {
+        sendStatus(splash, `Downloading update... ${pct}%`, pct)
+      })
 
-  autoUpdater.on('update-not-available', () => {
-    sendStatus(splash, 'Up to date.')
-    openMain()
-  })
+      sendStatus(splash, 'Update ready. Restarting...', 100)
 
-  autoUpdater.on('error', () => {
-    sendStatus(splash, 'Could not check for updates.')
-    openMain()
-  })
+      const currentExe = process.env.PORTABLE_EXECUTABLE_DIR
+        ? path.join(process.env.PORTABLE_EXECUTABLE_DIR, path.basename(process.execPath))
+        : process.execPath
 
-  autoUpdater.checkForUpdates()
+      const batPath = path.join(os.tmpdir(), 'pubble-update.bat')
+      fs.writeFileSync(batPath, `@echo off\ntimeout /t 2 /nobreak >nul\ncopy /y "${tempPath}" "${currentExe}"\nstart "" "${currentExe}"\ndel "%~f0"`)
+
+      setTimeout(() => {
+        require('child_process').execFile(batPath, { detached: true, shell: true })
+        app.quit()
+      }, 1500)
+
+    } catch (e) {
+      sendStatus(splash, 'Could not check for updates.')
+      openMain()
+    }
+  }
+
+  splash.webContents.once('did-finish-load', checkForUpdates)
 })
 
 app.on('window-all-closed', () => app.quit())
