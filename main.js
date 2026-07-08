@@ -350,9 +350,10 @@ app.whenReady().then(() => {
 
       sendStatus(splash, 'Update ready. Restarting...', 100)
 
-      const currentExe = process.env.PORTABLE_EXECUTABLE_DIR
-        ? path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'PubbleGameManager.exe')
-        : process.execPath
+      const currentExe = process.env.PORTABLE_EXECUTABLE_FILE
+        || (process.env.PORTABLE_EXECUTABLE_DIR
+          ? path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'PubbleGameManager.exe')
+          : process.execPath)
 
       const batPath = path.join(os.tmpdir(), 'pubble-update.bat')
       fs.writeFileSync(batPath, `@echo off\ntimeout /t 2 /nobreak >nul\ncopy /y "${tempPath}" "${currentExe}"\nstart "" "${currentExe}"\ndel "%~f0"`)
