@@ -5,8 +5,8 @@ const fs = require('fs')
 
 // Root is the parent folder of wherever this app lives
 const root = app.isPackaged
-  ? path.dirname(path.dirname(process.execPath))  // packaged exe: go up from pubble-sync-app/
-  : path.dirname(app.getAppPath())                // dev: getAppPath() is pubble-sync-app/
+  ? path.dirname(process.execPath)  // packaged exe: exe sits in root folder
+  : path.dirname(app.getAppPath())  // dev: getAppPath() is pubble-sync-app/
 
 const configPath = path.join(root, 'pubble-sync-config.json')
 
@@ -211,13 +211,14 @@ ipcMain.handle('change-template', async () => {
   }
 })
 
-function createWindow() {
+function createMainWindow() {
   const win = new BrowserWindow({
     width: 820,
     height: 620,
     resizable: false,
-    title: 'Pubble Sync',
+    title: 'Pubble Game Manager',
     backgroundColor: '#0f0f0f',
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true
@@ -225,10 +226,70 @@ function createWindow() {
   })
   win.loadFile('index.html')
   win.setMenuBarVisibility(false)
+  win.once('ready-to-show', () => win.show())
+  return win
+}
+
+function createSplashWindow() {
+  const splash = new BrowserWindow({
+    width: 380,
+    height: 240,
+    frame: false,
+    resizable: false,
+    center: true,
+    backgroundColor: '#1e1e2e',
+    webPreferences: { nodeIntegration: true, contextIsolation: false }
+  })
+  splash.loadFile('splash.html')
+  splash.setMenuBarVisibility(false)
+  return splash
+}
+
+function sendStatus(splash, message, progress) {
+  if (!splash.isDestroyed()) {
+    splash.webContents.send('update-status', { message, progress })
+  }
 }
 
 app.whenReady().then(() => {
-  createWindow()
-  autoUpdater.checkForUpdatesAndNotify()
+  const splash = createSplashWindow()
+
+  const openMain = () => {
+    setTimeout(() => {
+      if (!splash.isDestroyed()) splash.close()
+      createMainWindow()
+    }, 800)
+  }
+
+  autoUpdater.on('checking-for-update', () => {
+    sendStatus(splash, 'Checking for updates...')
+  })
+
+  autoUpdater.on('update-available', () => {
+    sendStatus(splash, 'Update found. Downloading...')
+  })
+
+  autoUpdater.on('download-progress', (info) => {
+    const pct = Math.round(info.percent)
+    sendStatus(splash, `Downloading update... ${pct}%`, pct)
+  })
+
+  autoUpdater.on('update-downloaded', () => {
+    sendStatus(splash, 'Update ready. Restarting...', 100)
+    setTimeout(() => autoUpdater.quitAndInstall(), 1500)
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    sendStatus(splash, 'Up to date.')
+    openMain()
+  })
+
+  autoUpdater.on('error', () => {
+    sendStatus(splash, 'Could not check for updates.')
+    openMain()
+  })
+
+  autoUpdater.checkForUpdates()
 })
+
 app.on('window-all-closed', () => app.quit())
