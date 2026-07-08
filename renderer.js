@@ -24,9 +24,10 @@ document.querySelectorAll('.nav-item').forEach(item => {
 
 // ── LOAD STATUS ──
 async function load() {
-  const { templateName, templateDate, folders, templateExists, root } = await window.api.getStatus()
+  const { templateName, templateDate, folders, templateExists, root, version } = await window.api.getStatus()
 
   document.getElementById('sidebar-scan-path').textContent = root || '—'
+  document.getElementById('app-version').textContent = version ? `v${version}` : ''
   document.getElementById('sidebar-tpl-name').textContent = templateExists ? templateName : 'Not found'
   document.getElementById('sidebar-tpl-date').textContent = (templateDate && templateDate !== 'unknown') ? formatDate(templateDate) : '—'
 

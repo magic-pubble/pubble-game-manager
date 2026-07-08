@@ -125,7 +125,7 @@ ipcMain.handle('get-status', () => {
   const templateExists = fs.existsSync(source)
   const templateDate = templateExists ? getTemplateDate(source) : null
   const folders = templateExists ? getFolders(source, templateName) : []
-  return { templateName, templateDate, folders, templateExists, root }
+  return { templateName, templateDate, folders, templateExists, root, version: app.getVersion() }
 })
 
 ipcMain.handle('run-sync', async (event, folderNames) => {
