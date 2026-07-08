@@ -5,8 +5,8 @@ const fs = require('fs')
 
 // Root is the parent folder of wherever this app lives
 const root = app.isPackaged
-  ? path.dirname(process.execPath)  // packaged exe: exe sits in root folder
-  : path.dirname(app.getAppPath())  // dev: getAppPath() is pubble-sync-app/
+  ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath))
+  : path.dirname(app.getAppPath())
 
 const configPath = path.join(root, 'pubble-sync-config.json')
 
