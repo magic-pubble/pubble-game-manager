@@ -28,7 +28,7 @@ async function load() {
 
   document.getElementById('sidebar-scan-path').textContent = root || '—'
   document.getElementById('sidebar-tpl-name').textContent = templateExists ? templateName : 'Not found'
-  document.getElementById('sidebar-tpl-date').textContent = templateDate ? formatDate(templateDate) : '—'
+  document.getElementById('sidebar-tpl-date').textContent = (templateDate && templateDate !== 'unknown') ? formatDate(templateDate) : '—'
 
   allFolders = folders
   renderFolders(folders)
