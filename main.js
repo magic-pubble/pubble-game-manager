@@ -114,6 +114,126 @@ function syncExclusive(src, dst, relBase) {
   return copied
 }
 
+// ── SMART MERGE: upgrade a game's index.html to the template's version
+// while preserving game-specific customizations (title, styles, scripts, custom slides)
+
+function normalizeHtml(s) {
+  return s.replace(/\s+/g, ' ').trim()
+}
+
+function getHeadAndRest(html) {
+  const end = html.indexOf('</head>')
+  if (end === -1) return null
+  return { head: html.slice(0, end), rest: html.slice(end) }
+}
+
+function getStyleBlocks(html) {
+  return html.match(/<style\b[\s\S]*?<\/style>/gi) || []
+}
+
+function getInlineScripts(html) {
+  // Only inline scripts (no src attribute)
+  return (html.match(/<script\b[^>]*>[\s\S]*?<\/script>/gi) || [])
+    .filter(s => !/^<script\b[^>]*\bsrc\s*=/i.test(s))
+}
+
+function getSections(html) {
+  return html.match(/<section\b[\s\S]*?<\/section>/gi) || []
+}
+
+function getClassAndIdTokens(html) {
+  const tokens = new Set()
+  for (const m of html.matchAll(/class="([^"]*)"/g)) {
+    m[1].split(/\s+/).forEach(t => t && tokens.add(t))
+  }
+  for (const m of html.matchAll(/id="([^"]*)"/g)) {
+    if (m[1]) tokens.add(m[1])
+  }
+  return tokens
+}
+
+function mergeIndexHtml(templateHtml, gameHtml) {
+  let merged = templateHtml
+
+  // 1. Preserve the game's <title>
+  const gameTitle = gameHtml.match(/<title>[\s\S]*?<\/title>/i)
+  if (gameTitle) {
+    merged = merged.replace(/<title>[\s\S]*?<\/title>/i, gameTitle[0])
+  }
+
+  // 2. Preserve the game's <style> blocks in <head> (brand colours + custom CSS)
+  const gameParts = getHeadAndRest(gameHtml)
+  const mergedParts = getHeadAndRest(merged)
+  if (gameParts && mergedParts) {
+    const gameStyles = getStyleBlocks(gameParts.head)
+    if (gameStyles.length > 0) {
+      const templateStyles = getStyleBlocks(mergedParts.head)
+      if (templateStyles.length > 0) {
+        // Replace the template's first head style with all of the game's styles,
+        // remove any extra template head styles
+        let head = mergedParts.head.replace(templateStyles[0], gameStyles.join('\n\n\t'))
+        for (let i = 1; i < templateStyles.length; i++) head = head.replace(templateStyles[i], '')
+        merged = head + mergedParts.rest
+      } else {
+        merged = mergedParts.head + '\n\t' + gameStyles.join('\n\n\t') + '\n' + mergedParts.rest
+      }
+    }
+  }
+
+  // 3. Preserve game-specific inline <script>s in <head> (e.g. custom interactions)
+  {
+    const gp = getHeadAndRest(gameHtml)
+    const mp = getHeadAndRest(merged)
+    if (gp && mp) {
+      const templateScriptSet = new Set(getInlineScripts(templateHtml).map(normalizeHtml))
+      const customHeadScripts = getInlineScripts(gp.head)
+        .filter(s => !templateScriptSet.has(normalizeHtml(s)))
+      if (customHeadScripts.length > 0) {
+        merged = mp.head + '\n\t' + customHeadScripts.join('\n\n\t') + '\n' + mp.rest
+      }
+    }
+  }
+
+  // 4. Preserve custom slides: game <section>s using classes/ids that the
+  //    template doesn't know about anywhere (e.g. a custom interactive grid)
+  const templateTokens = getClassAndIdTokens(templateHtml)
+  const gameSections = getSections(gameHtml)
+  const mergedSections = getSections(merged)
+
+  const sectionAnchor = (section) => {
+    const m = section.match(/data-trigger-popup="([^"]*)"/)
+    return m ? m[1] : null
+  }
+
+  for (let i = 0; i < gameSections.length; i++) {
+    const section = gameSections[i]
+    const tokens = getClassAndIdTokens(section)
+    const customTokens = [...tokens].filter(t => !templateTokens.has(t))
+    if (customTokens.length === 0) continue
+
+    // Find the nearest preceding game section with a popup trigger that
+    // also exists in the merged template — insert the custom slide after it
+    let inserted = false
+    for (let j = i - 1; j >= 0; j--) {
+      const anchor = sectionAnchor(gameSections[j])
+      if (!anchor) continue
+      const target = mergedSections.find(s => sectionAnchor(s) === anchor)
+      if (target) {
+        merged = merged.replace(target, target + '\n\n\t\t\t' + section)
+        inserted = true
+        break
+      }
+    }
+    // Fallback: insert before the closing of the slides container
+    if (!inserted) {
+      const lastSection = getSections(merged).pop()
+      if (lastSection) merged = merged.replace(lastSection, lastSection + '\n\n\t\t\t' + section)
+    }
+  }
+
+  return merged
+}
+
 function zipFolder(src, dest) {
   const { execSync } = require('child_process')
   fs.mkdirSync(path.dirname(dest), { recursive: true })
@@ -154,6 +274,22 @@ ipcMain.handle('run-sync', async (event, folderNames) => {
     // Exclusion-based sync
     result.copied = syncExclusive(source, gameFolder, '')
 
+    // Smart-merge index.html: template structure + game customizations
+    try {
+      const templateIndex = path.join(source, 'index.html')
+      const gameIndex = path.join(gameFolder, 'index.html')
+      if (fs.existsSync(templateIndex) && fs.existsSync(gameIndex)) {
+        const merged = mergeIndexHtml(
+          fs.readFileSync(templateIndex, 'utf8'),
+          fs.readFileSync(gameIndex, 'utf8')
+        )
+        fs.writeFileSync(gameIndex, merged, 'utf8')
+        result.merged = true
+      }
+    } catch (e) {
+      result.error = `index.html merge failed: ${e.message}`
+    }
+
     // Write last-updated.txt
     fs.writeFileSync(
       path.join(gameFolder, 'last-updated.txt'),
@@ -184,18 +320,13 @@ ipcMain.handle('create-game', (event, gameName) => {
     if (fs.existsSync(destination)) return { error: `Folder "${gameName}" already exists.` }
     copyRecursive(source, destination)
 
-    // Clear content.css to blank stub
-    const contentCss = path.join(destination, 'dist', 'content.css')
-    if (fs.existsSync(contentCss)) {
-      fs.writeFileSync(contentCss,
-        `/* ${gameName} - content.css\n   Add your CSS variables and ::before rules here. */\n\n:root {\n\n}\n`, 'utf8')
-    }
-
-    // Clear index.html to stub
+    // Keep template's content.css and index.html (full working game structure).
+    // Just personalize the title in index.html.
     const indexHtml = path.join(destination, 'index.html')
     if (fs.existsSync(indexHtml)) {
-      fs.writeFileSync(indexHtml,
-        `<!DOCTYPE html>\n<!-- ${gameName}\n     Replace this file with your game slides. -->\n<html lang="en">\n<head><meta charset="UTF-8"><title>${gameName}</title></head>\n<body><p>Replace this index.html with your game slides.</p></body>\n</html>\n`, 'utf8')
+      let html = fs.readFileSync(indexHtml, 'utf8')
+      html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>Pubble! - ${gameName}</title>`)
+      fs.writeFileSync(indexHtml, html, 'utf8')
     }
 
     // Remove template-only files

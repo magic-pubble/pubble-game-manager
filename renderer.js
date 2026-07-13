@@ -143,7 +143,7 @@ document.getElementById('sync-btn').addEventListener('click', async () => {
       log(`✗ ${r.name} — ${r.error}`, 'err')
       allOk = false
     } else {
-      log(`✓ ${r.name} — copied ${r.copied} files, backed up`, 'ok')
+      log(`✓ ${r.name} — copied ${r.copied} files${r.merged ? ', index.html merged' : ''}, backed up`, 'ok')
     }
   }
 
@@ -179,7 +179,7 @@ gameNameInput.addEventListener('input', () => {
   }
 
   previewTree.innerHTML = `<span class="highlight">📁 ${val}/</span>
-<span class="dim">├── </span><span class="manual">index.html ✏</span>
+<span class="dim">├── </span>index.html
 <span class="dim">├── </span>dist/
 <span class="dim">│   ├── </span><span class="manual">content.css ✏</span>
 <span class="dim">│   ├── </span>reveal.js
@@ -256,12 +256,12 @@ const tutorialSteps = [
   {
     targetSelector: '.nav-item[data-page="sync"]',
     title: 'Sync Games',
-    text: 'Select game folders and hit Sync. Shared files from your template (everything except <b>index.html</b> and <b>content.css</b>) are copied into each selected folder. A backup is made first.'
+    text: 'Select game folders and hit Sync. Shared files from your template are copied into each folder, and <b>index.html</b> is smart-merged: new template features are added while the game\'s own customizations are kept. <b>content.css</b> is never touched. A backup is made first.'
   },
   {
     targetSelector: '.nav-item[data-page="newgame"]',
     title: 'New Game',
-    text: "Create a new game folder copied from the template. Shared files come ready to use. You just need to fill in the game-specific ones: <b>index.html</b> and <b>content.css</b>."
+    text: "Create a new game folder copied from the template. Everything comes ready to use, including <b>index.html</b>. You just need to edit <b>content.css</b> with your game's text and styling."
   }
 ]
 
